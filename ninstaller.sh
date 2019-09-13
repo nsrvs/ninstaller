@@ -36,3 +36,6 @@ EOM
 
 
 INSTALL_LOG=/tmp/nsrvs-ninstaller.log
+
+
+##test commit from code
