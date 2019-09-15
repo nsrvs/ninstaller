@@ -1,41 +1,47 @@
 #/bin/bash
-#
-#
-#
-#   curl -sSL https://install.nsrvs.net | bash
-#
-#
-#
-#script has the following parts
-# 1. check the key that is entered (get the values)
-# 2. check the operating system
-# 3. check if rkt (docker) is installed or not
-# 4. depending on the OS install docker(rkt)
-# 5. ask for approval about the operations that is to be done on the host = are you sure ?
-# 6. ask for .authorized_keys access 
-# 7. use the openvpn+ssh keys to start the container 
-# 
+###get the value with runme.sh token
+curl -s https://api.nsrvs.com/tokens/$1 >/tmp/$1
+#grep -Po '"'"ovpncrt"'"\s*:\s*"\K([^"]*)' /tmp/$1 >  /tmp/ovpncrt
+#grep -Po '"'"ovpnkey"'"\s*:\s*"\K([^"]*)' /tmp/$1 >  /tmp/ovpnkey
+#grep -Po '"'"sshpub"'"\s*:\s*"\K([^"]*)' /tmp/$1 >  /tmp/sshpub
+#grep -Po '"'"sshkey"'"\s*:\s*"\K([^"]*)' /tmp/$1 >  /tmp/sshkey
+NOVPNCRT=$(grep -Po '"'"ovpncrt"'"\s*:\s*"\K([^"]*)' /tmp/$1)
+NOVPNKEY=$(grep -Po '"'"ovpnkey"'"\s*:\s*"\K([^"]*)' /tmp/$1)
+NSSHPUB=$(grep -Po '"'"sshpub"'"\s*:\s*"\K([^"]*)' /tmp/$1)
+NSSHKEY=$(grep -Po '"'"sshkey"'"\s*:\s*"\K([^"]*)' /tmp/$1)
+#NOPVNSRVID=$(grep -Po '"'"ovpnserver_id"'"\s*:\s*"\K([^"]*)' /tmp/$1)
+NOPVNSRVID=$(grep -Po '"ovpnserver_id":(\d*?,|.*?[^\\]",)' /tmp/26BBE7AC|grep -o '[0-9]*')
+#rm -rf /tmp/$1
+curl -s https://api.nsrvs.com/ovpnsrvr/$NOPVNSRVID > /tmp/ovpn-srv.conf
+NOVPNSIP=$(grep -Po '"'"serverip"'"\s*:\s*"\K([^"]*)' /tmp/ovpn-srv.conf)
+NOVPNSPORT=$(grep -Po '"'"serverport"'"\s*:\s*"\K([^"]*)' /tmp/ovpn-srv.conf)
+NOVPNCA=$(grep -Po '"'"ca"'"\s*:\s*"\K([^"]*)' /tmp/ovpn-srv.conf)
+NOVPNTLS=$(grep -Po '"'"tls-auth"'"\s*:\s*"\K([^"]*)' /tmp/ovpn-srv.conf)
+CLIENT_FILE="$(cat <<EOF
+##created by ninstaller
+client
+nobind
+dev tun
+remote-cert-tls server
 
-set -e 
+remote $NOVPNSIP $NOVPNSPORT udp
 
+<key>
+$NOVPNKEY
+</key>
+<cert>
+$NOVPNCRT
+</cert>
+<ca>
+$NOVPNCA
+</ca>
+key-direction 1
+<tls-auth>
+$NOVPNTLS
+</tls-auth>
 
-##DNS servers
-# List of supported DNS servers
-DNS_SERVERS=$(cat << EOM
-Google (ECS);8.8.8.8;8.8.4.4;2001:4860:4860:0:0:0:0:8888;2001:4860:4860:0:0:0:0:8844
-OpenDNS (ECS);208.67.222.222;208.67.220.220;2620:0:ccc::2;2620:0:ccd::2
-Level3;4.2.2.1;4.2.2.2;;
-Comodo;8.26.56.26;8.20.247.20;;
-DNS.WATCH;84.200.69.80;84.200.70.40;2001:1608:10:25:0:0:1c04:b12f;2001:1608:10:25:0:0:9249:d69b
-Quad9 (filtered, DNSSEC);9.9.9.9;149.112.112.112;2620:fe::fe;2620:fe::9
-Quad9 (unfiltered, no DNSSEC);9.9.9.10;149.112.112.10;2620:fe::10;2620:fe::fe:10
-Quad9 (filtered + ECS);9.9.9.11;149.112.112.11;2620:fe::11;
-Cloudflare;1.1.1.1;1.0.0.1;2606:4700:4700::1111;2606:4700:4700::1001
-EOM
-)
-
-
-INSTALL_LOG=/tmp/nsrvs-ninstaller.log
-
-
-##test commit from code
+redirect-gateway def1
+EOF
+)"
+echo "$CLIENT_FILE" >/tmp/client.ovpn
+sed -i 's/\\n/\'$'\n''/g' /tmp/client.ovpn
